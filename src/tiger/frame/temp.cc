@@ -16,6 +16,20 @@ namespace {
 }  // namespace
 
 namespace TEMP {
+    TEMP::TempList *tempList(TEMP::Temp *temp) {
+        static TEMP::TempList *tempList, *tempList_tail;
+        if (!temp) {
+            return tempList;
+        } else {
+            if (!tempList) {
+                tempList = new TEMP::TempList(temp, nullptr);
+                tempList_tail = tempList;
+            } else {
+                tempList_tail = tempList_tail->tail = new TEMP::TempList(temp, nullptr);
+            }
+        }
+        return tempList;
+    }
 
     Label *NewLabel() {
         char buf[100];
@@ -33,6 +47,7 @@ namespace TEMP {
         std::stringstream stream;
         stream << p->num;
         Map::Name()->Enter(p, new std::string(stream.str()));
+        tempList(p);
         return p;
     }
 
@@ -78,5 +93,7 @@ namespace TEMP {
             this->under->DumpMap(out);
         }
     }
+
+
 
 }  // namespace TEMP

@@ -100,6 +100,7 @@ namespace AS {
 
     void InstrList::Print(FILE *out, TEMP::Map *m) const {
         const InstrList *p = this;
+
         for (; p; p = p->tail) {
             p->head->Print(out, m);
         }

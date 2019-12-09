@@ -4,12 +4,12 @@
 
 extern int tigermain();
 
-int *initArray(int size, int init) {
-    printf("initARRAY\n");fflush(stdout);
-    int i;
-    int *a = (int *) malloc(size * sizeof(long));
-    for (i = 0; i < size; i++) a[i] = init;
-    return a;
+
+long *initArray(int size, int init) {
+  int i;
+  long *a = (long *)malloc(size * sizeof(long));
+  for (i = 0; i < size; i++) a[i] = init;
+  return a;
 }
 
 int *allocRecord(int size) {

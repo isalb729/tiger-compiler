@@ -2,7 +2,6 @@
 #define TIGER_CODEGEN_CODEGEN_H_
 
 #include "tiger/codegen/assem.h"
-#include "tiger/frame/frame.h"
 #include "tiger/translate/tree.h"
 
 namespace CG {
@@ -23,7 +22,8 @@ namespace CG {
     void munchCJumpStm(T::CjumpStm *);
     void munchMoveStm(T::MoveStm *);
     void munchExpStm(T::ExpStm *);
-    TEMP::TempList *munchArgs(int pos, T::ExpList *args);
+    TEMP::TempList *munchArgs(int pos, T::ExpList *args, std::string name);
+    std::string fs();
 
 }
 #endif

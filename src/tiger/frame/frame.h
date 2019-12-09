@@ -16,12 +16,33 @@ namespace TR {
     class Exp;
 }
 namespace F {
+    TEMP::Temp *RSP();
+    TEMP::Temp *RAX();
+
+    TEMP::Temp *RDX();
+
+    TEMP::Temp *FP();
+
+    TEMP::Temp *RV();
+
+    TEMP::Temp *SP();
+    TEMP::Temp *RDI();
+    TEMP::Temp *RBP();
+    TEMP::Temp *RBX();
+    TEMP::Temp *RSI();
+    TEMP::Temp *RCX();
+    TEMP::Temp *R8();
+    TEMP::Temp *R9();
+    TEMP::Temp *R10();
+    TEMP::Temp *R11();
+    TEMP::Temp *R12();
+    TEMP::Temp *R13();
+    TEMP::Temp *R14();
+    TEMP::Temp *R15();
+    TEMP::Temp *nthargs(uint n);
     class Access;
 
     class AccessList;
-
-    static TEMP::Temp *FP = TEMP::Temp::NewTemp(), *SP = TEMP::Temp::NewTemp(), *ZERO = TEMP::Temp::NewTemp(), *RV = TEMP::Temp::NewTemp(), *RA = TEMP::Temp::NewTemp();
-    static TEMP::Temp *eax = TEMP::Temp::NewTemp(), *edx = TEMP::Temp::NewTemp();
 
     class Frame {
         // Base class
@@ -41,7 +62,6 @@ namespace F {
         X64Frame(TEMP::Label *, U::BoolList *);
 
         Access *allocal(bool);
-//        TEMP::TempList *tempList;
     };
 
     class Access {
@@ -132,6 +152,8 @@ namespace F {
 
     AS::Proc *F_procEntryExit3(Frame *, AS::InstrList *body);
 
+    TEMP::Map *init_temp_map(TEMP::Map *);
+    TEMP::Map *regmap();
 }  // namespace F
 
 #endif

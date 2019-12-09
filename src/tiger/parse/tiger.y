@@ -59,16 +59,13 @@
 %type <fundec> fundec_one
 %left OR
 %left AND
+%nonassoc EQ NEQ LT GT LE GE
 %left PLUS MINUS
 %left TIMES DIVIDE
 %left UMINUS
-%nonassoc EQ NEQ LT GT LE GE
 %start program
 
 
- /*
-  * Put your codes here (lab3).
-  */
 
 %%
 program:  exp  {absyn_root = $1;};

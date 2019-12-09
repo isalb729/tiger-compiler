@@ -4,11 +4,7 @@
 #include <set>
 #include <string>
 #include "tiger/errormsg/errormsg.h"
-#include "tiger/frame/temp.h"
 #include "tiger/semant/semant.h"
-#include "tiger/semant/types.h"
-#include "tiger/util/util.h"
-#include "tiger/translate/tree.h"
 
 #define p(s, ...) do { \
   printf(s, ##__VA_ARGS__); \
@@ -41,9 +37,10 @@ namespace {
     }
 
     static U::BoolList *make_boollist(A::FieldList *fieldList) {
+        // not include the static link
         U::BoolList *boolList = new U::BoolList(true, nullptr), *tail = boolList;
         while (fieldList) {
-            tail->tail = new U::BoolList(fieldList->head->escape, nullptr);
+            tail = tail->tail = new U::BoolList(fieldList->head->escape, nullptr);
             fieldList = fieldList->tail;
         }
         return boolList->tail;
@@ -89,22 +86,25 @@ namespace TR {
             return accessList->tail;
         }
 
+        // include static link
         static Level *NewLevel(Level *parent, TEMP::Label *name,
                                U::BoolList *formals) {
             U::BoolList *escape;
-            if (parent->frame) {
+            if (parent) {
                 escape = new U::BoolList(true, formals);
             } else {
                 escape = formals;
             }
             F::Frame *frame_ = new F::X64Frame(name, escape);
-            return new Level(frame_, parent);
+            Level *level = new Level(frame_, parent);
+            // static link added later
+            return level;
         };
     };
 
     Access *Access::AllocLocal(Level *level, bool escape) {
         Access *access_ = new Access(level,
-                                     ((F::X64Frame *) level->frame)->allocal(escape));;
+                                     ((F::X64Frame *) level->frame)->allocal(escape));
         return access_;
     }
 
@@ -140,29 +140,26 @@ namespace TR {
 
 
     F::FragList *TranslateProgram(A::Exp *root) {
-        p("BEGIN TRANSLATION\n ------------------------\n")
         if (root) {
-            Level *level = Level::NewLevel(Outermost(), TEMP::NewLabel(), nullptr);
+            Level *level = Level::NewLevel(Outermost(), TEMP::NamedLabel("tigermain"), nullptr);
             TR::ExpAndTy expAndTy = root->Translate(E::BaseVEnv(), E::BaseTEnv(), level, TEMP::NewLabel());
             T::Stm *stm = expAndTy.exp->UnNx();
             F::Frag *procFrag = new F::ProcFrag(stm, level->frame);
             addFrag(procFrag);
         }
-        p("END TRANSLATION\n ------------------------\n")
-        F::FragList *f = fragList;
-        while (f->tail) {
-            if (f->tail->head->kind == F::Frag::STRING) {
-            } else {
-                ((F::ProcFrag *) (f->tail->head))->body->Print(stdout, 4);
-                p("\n--------------\n")
+        F::FragList *fragList1 = fragList->tail;
+        while (fragList1) {
+            if (fragList1->head->kind == F::Frag::PROC) {
+                ((F::ProcFrag *)fragList1->head)->body->Print(stdout, 4);
+                p("--------------------------------------\n");
             }
-            f = f->tail;
+
+            fragList1 = fragList1->tail;
         }
         return fragList->tail;
     }
 
     T::Stm *procEntryExit1(F::Frame *frame, TR::Exp *body) {
-        p("$\n");
         if (body->kind == TR::Exp::NX) {
             T::Stm *stm = body->UnNx();
             F::Frag *frag = new F::ProcFrag(stm, frame);
@@ -171,7 +168,7 @@ namespace TR {
         } else {
             T::Stm *stm = body->UnNx();
             F::Frag *frag = new F::ProcFrag(
-                    new T::SeqStm(body->UnNx(), new T::MoveStm(new T::TempExp(F::eax), body->UnEx())), frame);
+                    new T::MoveStm(new T::TempExp(F::RV()), body->UnEx()), frame);
             addFrag(frag);
             return stm;
         }
@@ -199,6 +196,11 @@ namespace TR {
         }
     }
 
+    bool runtime(std::string name) {
+        return name == "initArray" || name == "allocRecord" || name == "stringEqual" || name == "print" ||
+               name == "printi" || name == "flush" || name == "ord" || name == "chr" || name == "size" ||
+               name == "substring" || name == "concat" || name == "not";
+    }
 
 }  // namespace TR
 
@@ -207,14 +209,15 @@ namespace A {
     TR::ExpAndTy SimpleVar::Translate(S::Table<E::EnvEntry> *venv,
                                       S::Table<TY::Ty> *tenv, TR::Level *level,
                                       TEMP::Label *label) const {
-        p("Translate: simplevar\n")
+        //p("Translate: simplevar\n")
         E::EnvEntry *ve = venv->Look(this->sym);
-        T::Exp *framePtr = new T::TempExp(F::FP);
+        T::Exp *framePtr = new T::TempExp(F::FP());
         if (ve && ve->kind == E::EnvEntry::VAR) {
             while (((E::VarEntry *) ve)->access->level != level) {
                 framePtr = level->frame->formals->head->toExp(framePtr);
                 level = level->parent;
             }
+
             T::Exp *tExp = ((E::VarEntry *) ve)->access->access->toExp(framePtr);
             TR::Exp *trExp = new TR::ExExp(tExp);
             return TR::ExpAndTy(trExp, ((E::VarEntry *) ve)->ty->ActualTy());
@@ -227,7 +230,7 @@ namespace A {
     TR::ExpAndTy FieldVar::Translate(S::Table<E::EnvEntry> *venv,
                                      S::Table<TY::Ty> *tenv, TR::Level *level,
                                      TEMP::Label *label) const {
-        p("Translate: fieldvar\n");
+        //p("Translate: fieldvar\n");
         TR::ExpAndTy expAndTy = this->var->Translate(venv, tenv, level, label);
         TY::Ty *ty = expAndTy.ty;
         TR::Exp *exp = expAndTy.exp;
@@ -243,7 +246,7 @@ namespace A {
                             new T::MemExp(new T::BinopExp(T::PLUS_OP, exp->UnEx(), new T::ConstExp(pos))));
                     return TR::ExpAndTy(trExp, fieldList->head->ty->ActualTy());
                 }
-                pos += 4;
+                pos += 8;
                 fieldList = fieldList->tail;
             }
             errormsg.Error(this->pos, "field %s doesn't exist", this->sym->Name().c_str());
@@ -254,7 +257,7 @@ namespace A {
     TR::ExpAndTy SubscriptVar::Translate(S::Table<E::EnvEntry> *venv,
                                          S::Table<TY::Ty> *tenv, TR::Level *level,
                                          TEMP::Label *label) const {
-        p("Translate: subscriptvar\n");
+        //p("Translate: subscriptvar\n");
         TR::ExpAndTy expAndTy = this->var->Translate(venv, tenv, level, label);
         TY::Ty *ty = expAndTy.ty;
         if (ty->kind != TY::Ty::ARRAY) {
@@ -276,28 +279,28 @@ namespace A {
     TR::ExpAndTy VarExp::Translate(S::Table<E::EnvEntry> *venv,
                                    S::Table<TY::Ty> *tenv, TR::Level *level,
                                    TEMP::Label *label) const {
-        p("Translate: varexp\n");
+        //p("Translate: varexp\n");
         return this->var->Translate(venv, tenv, level, label);
     }
 
     TR::ExpAndTy NilExp::Translate(S::Table<E::EnvEntry> *venv,
                                    S::Table<TY::Ty> *tenv, TR::Level *level,
                                    TEMP::Label *label) const {
-        p("Translate: nilexp\n");
+        //p("Translate: nilexp\n");
         return TR::ExpAndTy(new TR::ExExp(new T::ConstExp(0)), TY::NilTy::Instance());
     }
 
     TR::ExpAndTy IntExp::Translate(S::Table<E::EnvEntry> *venv,
                                    S::Table<TY::Ty> *tenv, TR::Level *level,
                                    TEMP::Label *label) const {
-        p("Translate: intexp\n");
+        //p("Translate: intexp\n");
         return TR::ExpAndTy(new TR::ExExp(new T::ConstExp(this->i)), TY::IntTy::Instance());
     }
 
     TR::ExpAndTy StringExp::Translate(S::Table<E::EnvEntry> *venv,
                                       S::Table<TY::Ty> *tenv, TR::Level *level,
                                       TEMP::Label *label) const {
-        p("Translate: stringexp\n")
+        //p("Translate: stringexp\n")
         TEMP::Label *label_ = TEMP::NewLabel();
         F::FragList *f = TR::fragList->tail;
         F::Frag *frag = new F::StringFrag(label_, this->s);
@@ -308,7 +311,7 @@ namespace A {
     TR::ExpAndTy CallExp::Translate(S::Table<E::EnvEntry> *venv,
                                     S::Table<TY::Ty> *tenv, TR::Level *level,
                                     TEMP::Label *label) const {
-        p("Translate: callexp\n");
+        //p("Translate: callexp\n");
         E::EnvEntry *funEntry = venv->Look(this->func);
         T::ExpList *expList_ = new T::ExpList(nullptr, nullptr), *tail = expList_;
         if (!funEntry || funEntry->kind != E::EnvEntry::FUN) {
@@ -332,18 +335,17 @@ namespace A {
                 errormsg.Error(this->pos, "too few params");
             }
         }
-        T::Exp *frame = new T::TempExp(F::FP);
+        T::Exp *frame = new T::TempExp(F::FP());
         if (((E::FunEntry *) funEntry)->level == TR::Outermost()) {
-            return TR::ExpAndTy(new TR::ExExp(F::ExternalCall(TEMP::LabelString(this->func), expList_->tail)),
+            // TODO: WARNING THE STATIC LINK REFER TO NOTHing
+            expList_->head = level->frame->formals->head->toExp(frame);
+            return TR::ExpAndTy(new TR::ExExp(F::ExternalCall(TEMP::LabelString(this->func), expList_)),
                                 ((E::FunEntry *) funEntry)->result->ActualTy());
         }
         while (((E::FunEntry *) funEntry)->level->parent != level) {
-            // TODO: WHERE IS THE FRAME
             frame = level->frame->formals->head->toExp(frame);
-//            frame = new T::MemExp(new T::BinopExp(T::PLUS_OP, frame, new T::ConstExp(-4)));
             level = level->parent;
         }
-
         expList_->head = frame;
         return TR::ExpAndTy(new TR::ExExp(new T::CallExp(new T::NameExp(((E::FunEntry *) funEntry)->label), expList_)),
                             ((E::FunEntry *) funEntry)->result->ActualTy());
@@ -353,7 +355,7 @@ namespace A {
     TR::ExpAndTy OpExp::Translate(S::Table<E::EnvEntry> *venv,
                                   S::Table<TY::Ty> *tenv, TR::Level *level,
                                   TEMP::Label *label) const {
-        p("Translate: opexp\n");
+        //p("Translate: opexp\n");
         TR::ExpAndTy expAndTy1 = this->left->Translate(venv, tenv, level, label);
         TR::ExpAndTy expAndTy2 = this->right->Translate(venv, tenv, level, label);
         TY::Ty *ty1 = expAndTy1.ty;
@@ -418,11 +420,12 @@ namespace A {
     TR::ExpAndTy RecordExp::Translate(S::Table<E::EnvEntry> *venv,
                                       S::Table<TY::Ty> *tenv, TR::Level *level,
                                       TEMP::Label *label) const {
-        p("Translate: recordexp\n")
+        //p("Translate: recordexp\n")
 
         TY::Ty *ty = tenv->Look(this->typ);
         int count = 0;
         TEMP::Temp *r = TEMP::Temp::NewTemp();
+        // TODO: REMOVE ADDTEMP
         T::Stm *stm_ = new T::SeqStm(nullptr, nullptr);
         T::StmList *stmList = new T::StmList(nullptr, nullptr), *tail = stmList;
         if (!ty) {
@@ -444,7 +447,7 @@ namespace A {
                 eFieldList = eFieldList->tail;
                 tail = tail->tail = new T::StmList(new T::MoveStm(
                         new T::MemExp(
-                                new T::BinopExp(T::PLUS_OP, new T::TempExp(r), new T::ConstExp(count * 4))),
+                                new T::BinopExp(T::PLUS_OP, new T::TempExp(r), new T::ConstExp(count * 8))),
                         expAndTy.exp->UnEx()), nullptr);
                 count++;
             }
@@ -456,25 +459,24 @@ namespace A {
         }
         T::Stm *stm = new T::MoveStm(new T::TempExp(r),
                                      new T::CallExp(new T::NameExp(TEMP::NamedLabel("allocRecord")),
-                                                    new T::ExpList(new T::ConstExp(4 * count),
+                                                    new T::ExpList(new T::ConstExp(8 * count),
                                                                    nullptr)));
         if (stm_) {
             stm_ = new T::SeqStm(stm, stm_);
         } else {
             stm_ = stm;
         }
-
         return TR::ExpAndTy(new TR::ExExp(new T::EseqExp(stm_, new T::TempExp(r))), ty->ActualTy());
     }
 
     TR::ExpAndTy SeqExp::Translate(S::Table<E::EnvEntry> *venv,
                                    S::Table<TY::Ty> *tenv, TR::Level *level,
                                    TEMP::Label *label) const {
-        p("Translate: seqexp\n");
+        //p("Translate: seqexp\n");
         ExpList *expList = this->seq;
         TY::Ty *ty;
         if (!expList) {
-            p("NO EXPRESSIONLIST??\n")
+            //p("NO EXPRESSIONLIST??\n")
             return TR::ExpAndTy(nullptr, TY::VoidTy::Instance());
         } else {
             TR::ExpAndTy expAndTy = expList->head->Translate(venv, tenv, level, label);
@@ -503,7 +505,7 @@ namespace A {
     TR::ExpAndTy AssignExp::Translate(S::Table<E::EnvEntry> *venv,
                                       S::Table<TY::Ty> *tenv, TR::Level *level,
                                       TEMP::Label *label) const {
-        p("Translate: assignexp\n");
+        //p("Translate: assignexp\n");
         if (var->kind == A::Var::SIMPLE) {
             E::EnvEntry *varEntry = venv->Look(((SimpleVar *) var)->sym);
             if (varEntry->readonly) {
@@ -595,6 +597,8 @@ namespace A {
                 return TR::ExpAndTy(nullptr, ty2);
             }
             // TODO: WHAT'S A LABELLIST
+            done_label = false_label;
+
             return TR::ExpAndTy(new TR::NxExp(new T::SeqStm(cx.stm, new T::SeqStm(new T::LabelStm(true_label),
                                                                                   new T::SeqStm(expAndTy2.exp->UnNx(),
                                                                                                 new T::SeqStm(
@@ -619,6 +623,7 @@ namespace A {
         TY::Ty *ty = expAndTy.ty;
         // if there is a break
         TR::ExpAndTy expAndTy1 = body->Translate(venv, tenv, level, done_label);
+        p("...\n")
         TY::Ty *ty1 = expAndTy1.ty;
         if (ty1->kind != TY::Ty::VOID) {
             errormsg.Error(pos, "while body must produce no value");
@@ -649,7 +654,6 @@ namespace A {
     TR::ExpAndTy ForExp::Translate(S::Table<E::EnvEntry> *venv,
                                    S::Table<TY::Ty> *tenv, TR::Level *level,
                                    TEMP::Label *label) const {
-        p("Translate: forexp\n");
         venv->BeginScope();
         TR::ExpAndTy expAndTy1 = lo->Translate(venv, tenv, level, label);
         TR::ExpAndTy expAndTy2 = hi->Translate(venv, tenv, level, label);
@@ -669,7 +673,7 @@ namespace A {
             varEntry = new E::VarEntry(access, ty1, true);
             venv->Enter(var, varEntry);
         }
-        T::Exp *varexp = ((E::VarEntry *) varEntry)->access->access->toExp(new T::TempExp(F::FP));
+        T::Exp *varexp = ((E::VarEntry *) varEntry)->access->access->toExp(new T::TempExp(F::FP()));
         // if there is a break
         TR::ExpAndTy expAndTy = body->Translate(venv, tenv, level, false_label);
         TY::Ty *ty = expAndTy.ty;
@@ -708,7 +712,7 @@ namespace A {
     TR::ExpAndTy BreakExp::Translate(S::Table<E::EnvEntry> *venv,
                                      S::Table<TY::Ty> *tenv, TR::Level *level,
                                      TEMP::Label *label) const {
-        p("Translate: breakexp\n");
+        //p("Translate: breakexp\n");
         return TR::ExpAndTy(new TR::NxExp(new T::JumpStm(new T::NameExp(label), new TEMP::LabelList(label, nullptr))),
                             TY::VoidTy::Instance());
     }
@@ -716,13 +720,14 @@ namespace A {
     TR::ExpAndTy LetExp::Translate(S::Table<E::EnvEntry> *venv,
                                    S::Table<TY::Ty> *tenv, TR::Level *level,
                                    TEMP::Label *label) const {
-        p("Translate: letexp\n");
+        //p("Translate: letexp\n");
         venv->BeginScope();
         tenv->BeginScope();
         DecList *decList = this->decs;
         TR::Exp *exp = nullptr;
         T::StmList *stmList = new T::StmList(nullptr, nullptr), *tail = stmList;
         while (decList) {
+            //p("DEclation\n")
             exp = decList->head->Translate(venv, tenv, level, label);
             decList = decList->tail;
             if (!exp) {
@@ -747,7 +752,7 @@ namespace A {
     TR::ExpAndTy ArrayExp::Translate(S::Table<E::EnvEntry> *venv,
                                      S::Table<TY::Ty> *tenv, TR::Level *level,
                                      TEMP::Label *label) const {
-        p("Translate: arrayexp\n");
+        //p("Translate: arrayexp\n");
         TY::Ty *ty = tenv->Look(typ)->ActualTy();
         TR::ExpAndTy expAndTy = size->Translate(venv, tenv, level, label);
         // TODO: INIT CAN BE NULL
@@ -774,7 +779,7 @@ namespace A {
     TR::ExpAndTy VoidExp::Translate(S::Table<E::EnvEntry> *venv,
                                     S::Table<TY::Ty> *tenv, TR::Level *level,
                                     TEMP::Label *label) const {
-        p("Translate: voidexp\n")
+        //p("Translate: voidexp\n")
         // TODO: MAYBE NO VALUE
         return TR::ExpAndTy(new TR::NxExp(new T::ExpStm(new T::ConstExp(0))), TY::VoidTy::Instance());
     }
@@ -791,6 +796,14 @@ namespace A {
             }
             TY::TyList *tyList = make_formal_tylist(tenv, funDecList->head->params);
             TEMP::Label *name = TEMP::NewLabel();
+            // TODO: FOR RUNTIME FUNCTIONS FIX IT IN LAB6
+            if (TR::runtime(funDecList->head->name->Name())) {
+                FieldList *params_ = funDecList->head->params;
+                while (params_) {
+                    params_->head->escape = false;
+                    params_ = params_->tail;
+                }
+            }
             U::BoolList *boolList = make_boollist(funDecList->head->params);
             TR::Level *newLevel = TR::Level::NewLevel(level, name, boolList);
             if (funDecList->head->result) {
@@ -811,13 +824,12 @@ namespace A {
             TY::TyList *tyList = make_formal_tylist(tenv, funDecList->head->params);
             venv->BeginScope();
             FieldList *fieldList = funDecList->head->params;
-            TY::TyList *tyList1 = tyList;
             E::EnvEntry *funEntry = venv->Look(funDecList->head->name);
             TR::Level *newLevel = ((E::FunEntry *) funEntry)->level;
-            F::AccessList *accessList = newLevel->frame->formals;
+            F::AccessList *accessList = newLevel->frame->formals->tail;
             while (fieldList) {
                 venv->Enter(fieldList->head->name,
-                            new E::VarEntry(new TR::Access(newLevel, accessList->head), tyList1->head));
+                            new E::VarEntry(new TR::Access(newLevel, accessList->head), tyList->head));
                 fieldList = fieldList->tail;
                 tyList = tyList->tail;
                 accessList = accessList->tail;
@@ -829,7 +841,6 @@ namespace A {
             } else if (((E::FunEntry *) funEntry)->result != ty) {
                 errormsg.Error(funDecList->head->pos, "return value doesnt match");
             }
-            // TODO: LEVEL FRAME OR NEW FRAME
             procEntryExit1(newLevel->frame, expAndTy.exp);
             venv->EndScope();
             funDecList = funDecList->tail;
@@ -839,7 +850,7 @@ namespace A {
 
     TR::Exp *VarDec::Translate(S::Table<E::EnvEntry> *venv, S::Table<TY::Ty> *tenv,
                                TR::Level *level, TEMP::Label *label) const {
-        p("Translate: vardec\n");
+        //p("Translate: vardec\n");
         TR::ExpAndTy expAndTy = init->Translate(venv, tenv, level, label);
         TY::Ty *ty = expAndTy.ty;
         if (!typ) {
@@ -863,8 +874,6 @@ namespace A {
         }
         A::Var *simpleVar = new A::SimpleVar(pos, this->var);
         TR::ExpAndTy expAndTy1 = simpleVar->Translate(venv, tenv, level, label);
-//        A::AssignExp *assignExp = new AssignExp(this->pos, simpleVar, init);
-//        return assignExp->Translate(venv, tenv, level, label).exp;
         return new TR::NxExp(new T::MoveStm(expAndTy1.exp->UnEx(), expAndTy.exp->UnEx()));
     }
 

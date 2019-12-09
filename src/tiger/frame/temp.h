@@ -4,7 +4,6 @@
 #include "tiger/symbol/symbol.h"
 
 namespace TEMP {
-
     using Label = S::Symbol;
 
     Label *NewLabel();
@@ -65,6 +64,7 @@ namespace TEMP {
         LabelList(Label *h, LabelList *t) : head(h), tail(t) {}
     };
 
+    TEMP::TempList *tempList(TEMP::Temp *);
 }  // namespace TEMP
 
 #endif

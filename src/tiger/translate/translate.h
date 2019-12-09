@@ -4,16 +4,21 @@
 #include "tiger/absyn/absyn.h"
 #include "tiger/frame/frame.h"
 #include "tiger/translate/printtree.h"
+#include "tiger/util/util.h"
+#include "tiger/translate/tree.h"
 /* Forward Declarations */
 namespace A {
     class Exp;
 }  // namespace A
 namespace TR {
+
+
     class PatchList {
     public:
         // address of the NULLS
         TEMP::Label **head;
         PatchList *tail;
+
         PatchList(TEMP::Label **head, PatchList *tail) : head(head), tail(tail) {}
     };
 
@@ -135,6 +140,7 @@ namespace TR {
     Level *Outermost();
 
     F::FragList *TranslateProgram(A::Exp *);
+
     static F::FragList *fragList = new F::FragList(nullptr, nullptr), *_tail = fragList;
 
     T::Stm *procEntryExit1(F::Frame *frame, TR::Exp *body);
@@ -145,6 +151,18 @@ namespace TR {
     }
 
     static T::Stm *stmList2SeqStm(T::StmList *);
+
+    template<typename t>
+    static uint listLen(t *i) {
+        uint count = 0;
+        while (i) {
+            i = i->tail;
+            count++;
+        }
+        return count;
+    };
+
+    bool runtime(std::string);
 }  // namespace TR
 
 #endif
