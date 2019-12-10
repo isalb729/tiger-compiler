@@ -147,15 +147,6 @@ namespace TR {
             F::Frag *procFrag = new F::ProcFrag(stm, level->frame);
             addFrag(procFrag);
         }
-        F::FragList *fragList1 = fragList->tail;
-        while (fragList1) {
-            if (fragList1->head->kind == F::Frag::PROC) {
-                ((F::ProcFrag *)fragList1->head)->body->Print(stdout, 4);
-                p("--------------------------------------\n");
-            }
-
-            fragList1 = fragList1->tail;
-        }
         return fragList->tail;
     }
 
@@ -271,7 +262,7 @@ namespace A {
                 return TR::ExpAndTy(nullptr, TY::IntTy::Instance());
             }
             TR::ExExp *exExp = new TR::ExExp(
-                    new T::MemExp(new T::BinopExp(T::PLUS_OP, expAndTy.exp->UnEx(), expAndTy1.exp->UnEx())));
+                    new T::MemExp(new T::BinopExp(T::PLUS_OP, expAndTy.exp->UnEx(), new T::BinopExp(T::MUL_OP, expAndTy1.exp->UnEx(), new T::ConstExp(8)))));
             return TR::ExpAndTy(exExp, ((TY::ArrayTy *) ty)->ty->ActualTy());
         }
     }
@@ -337,8 +328,7 @@ namespace A {
         }
         T::Exp *frame = new T::TempExp(F::FP());
         if (((E::FunEntry *) funEntry)->level == TR::Outermost()) {
-            // TODO: WARNING THE STATIC LINK REFER TO NOTHing
-            expList_->head = level->frame->formals->head->toExp(frame);
+            expList_->head = frame;
             return TR::ExpAndTy(new TR::ExExp(F::ExternalCall(TEMP::LabelString(this->func), expList_)),
                                 ((E::FunEntry *) funEntry)->result->ActualTy());
         }
@@ -351,7 +341,6 @@ namespace A {
                             ((E::FunEntry *) funEntry)->result->ActualTy());
     }
 
-// TODO: EXTERNAL, PRINTI, PRINT, STRINGEQUAL
     TR::ExpAndTy OpExp::Translate(S::Table<E::EnvEntry> *venv,
                                   S::Table<TY::Ty> *tenv, TR::Level *level,
                                   TEMP::Label *label) const {
@@ -375,43 +364,63 @@ namespace A {
         }
         T::BinOp binOp;
         T::RelOp relOp;
-        switch (oper) {
-            case PLUS_OP:
-                binOp = T::PLUS_OP;
-                return TR::ExpAndTy(new TR::ExExp(new T::BinopExp(binOp, expAndTy1.exp->UnEx(), expAndTy2.exp->UnEx())),
-                                    TY::IntTy::Instance());
-            case MINUS_OP:
-                binOp = T::MINUS_OP;
-                return TR::ExpAndTy(new TR::ExExp(new T::BinopExp(binOp, expAndTy1.exp->UnEx(), expAndTy2.exp->UnEx())),
-                                    TY::IntTy::Instance());
-            case TIMES_OP:
-                binOp = T::MUL_OP;
-                return TR::ExpAndTy(new TR::ExExp(new T::BinopExp(binOp, expAndTy1.exp->UnEx(), expAndTy2.exp->UnEx())),
-                                    TY::IntTy::Instance());
-            case DIVIDE_OP:
-                binOp = T::DIV_OP;
-                return TR::ExpAndTy(new TR::ExExp(new T::BinopExp(binOp, expAndTy1.exp->UnEx(), expAndTy2.exp->UnEx())),
-                                    TY::IntTy::Instance());
-            case EQ_OP:
-                relOp = T::EQ_OP;
-                break;
-            case NEQ_OP:
-                relOp = T::NE_OP;
-                break;
-            case GE_OP:
-                relOp = T::GE_OP;
-                break;
-            case GT_OP:
-                relOp = T::GT_OP;
-                break;
-            case LT_OP:
-                relOp = T::LT_OP;
-                break;
-            case LE_OP:
-                relOp = T::LE_OP;
-                break;
+        T::Stm *stm;
+        if (expAndTy1.exp->UnEx()->kind == T::Exp::NAME && expAndTy2.exp->UnEx()->kind == T::Exp::NAME) {
+            T::Exp *call = F::ExternalCall("stringEqual", new T::ExpList(level->frame->formals->head->toExp(new T::TempExp(F::FP())), new T::ExpList(expAndTy1.exp->UnEx(), new T::ExpList(expAndTy2.exp->UnEx(),
+                                                                                                           nullptr))));
+            switch (oper) {
+                case EQ_OP:
+                    stm = new T::CjumpStm(T::EQ_OP, call, new T::ConstExp(1), nullptr, nullptr);
+                    break;
+                case NEQ_OP:
+                    stm = new T::CjumpStm(T::EQ_OP, call, new T::ConstExp(0), nullptr, nullptr);
+                    break;
+                default:
+                    assert(0);
+            }
+        } else {
+            switch (oper) {
+                case PLUS_OP:
+                    binOp = T::PLUS_OP;
+                    return TR::ExpAndTy(
+                            new TR::ExExp(new T::BinopExp(binOp, expAndTy1.exp->UnEx(), expAndTy2.exp->UnEx())),
+                            TY::IntTy::Instance());
+                case MINUS_OP:
+                    binOp = T::MINUS_OP;
+                    return TR::ExpAndTy(
+                            new TR::ExExp(new T::BinopExp(binOp, expAndTy1.exp->UnEx(), expAndTy2.exp->UnEx())),
+                            TY::IntTy::Instance());
+                case TIMES_OP:
+                    binOp = T::MUL_OP;
+                    return TR::ExpAndTy(
+                            new TR::ExExp(new T::BinopExp(binOp, expAndTy1.exp->UnEx(), expAndTy2.exp->UnEx())),
+                            TY::IntTy::Instance());
+                case DIVIDE_OP:
+                    binOp = T::DIV_OP;
+                    return TR::ExpAndTy(
+                            new TR::ExExp(new T::BinopExp(binOp, expAndTy1.exp->UnEx(), expAndTy2.exp->UnEx())),
+                            TY::IntTy::Instance());
+                case EQ_OP:
+                    relOp = T::EQ_OP;
+                    break;
+                case NEQ_OP:
+                    relOp = T::NE_OP;
+                    break;
+                case GE_OP:
+                    relOp = T::GE_OP;
+                    break;
+                case GT_OP:
+                    relOp = T::GT_OP;
+                    break;
+                case LT_OP:
+                    relOp = T::LT_OP;
+                    break;
+                case LE_OP:
+                    relOp = T::LE_OP;
+                    break;
+            }
+            stm = new T::CjumpStm(relOp, expAndTy1.exp->UnEx(), expAndTy2.exp->UnEx(), nullptr, nullptr);
         }
-        T::Stm *stm = new T::CjumpStm(relOp, expAndTy1.exp->UnEx(), expAndTy2.exp->UnEx(), nullptr, nullptr);
         TR::PatchList *trues = new TR::PatchList(&(((T::CjumpStm *) stm)->true_label), nullptr);
         TR::PatchList *falses = new TR::PatchList(&(((T::CjumpStm *) stm)->false_label), nullptr);
         return TR::ExpAndTy(new TR::CxExp(trues, falses, stm), TY::IntTy::Instance());
@@ -526,7 +535,7 @@ namespace A {
     TR::ExpAndTy IfExp::Translate(S::Table<E::EnvEntry> *venv,
                                   S::Table<TY::Ty> *tenv, TR::Level *level,
                                   TEMP::Label *label) const {
-        p("Translate: ifexp\n");
+//        p("Translate: ifexp\n");
         TR::ExpAndTy expAndTy1 = test->Translate(venv, tenv, level, label);
         TR::ExpAndTy expAndTy2 = then->Translate(venv, tenv, level, label);
         TY::Ty *ty1 = expAndTy1.ty;
@@ -596,7 +605,6 @@ namespace A {
                 errormsg.Error(this->pos, "if-then exp's body must produce no value");
                 return TR::ExpAndTy(nullptr, ty2);
             }
-            // TODO: WHAT'S A LABELLIST
             done_label = false_label;
 
             return TR::ExpAndTy(new TR::NxExp(new T::SeqStm(cx.stm, new T::SeqStm(new T::LabelStm(true_label),
@@ -617,13 +625,12 @@ namespace A {
     TR::ExpAndTy WhileExp::Translate(S::Table<E::EnvEntry> *venv,
                                      S::Table<TY::Ty> *tenv, TR::Level *level,
                                      TEMP::Label *label) const {
-        p("Translate: whileexp\n");
+//        p("Translate: whileexp\n");
         TR::ExpAndTy expAndTy = test->Translate(venv, tenv, level, label);
         TEMP::Label *done_label = TEMP::NewLabel();
         TY::Ty *ty = expAndTy.ty;
         // if there is a break
         TR::ExpAndTy expAndTy1 = body->Translate(venv, tenv, level, done_label);
-        p("...\n")
         TY::Ty *ty1 = expAndTy1.ty;
         if (ty1->kind != TY::Ty::VOID) {
             errormsg.Error(pos, "while body must produce no value");
@@ -772,15 +779,14 @@ namespace A {
             }
         }
         return TR::ExpAndTy(new TR::ExExp(
-                F::ExternalCall("initArray", new T::ExpList(expAndTy.exp->UnEx(), new T::ExpList(expAndTy1.exp->UnEx(),
-                                                                                                 nullptr)))), ty);
+                F::ExternalCall("initArray", new T::ExpList(new T::TempExp(F::FP()), new T::ExpList(expAndTy.exp->UnEx(), new T::ExpList(expAndTy1.exp->UnEx(),
+                                                                                                 nullptr))))), ty);
     }
 
     TR::ExpAndTy VoidExp::Translate(S::Table<E::EnvEntry> *venv,
                                     S::Table<TY::Ty> *tenv, TR::Level *level,
                                     TEMP::Label *label) const {
         //p("Translate: voidexp\n")
-        // TODO: MAYBE NO VALUE
         return TR::ExpAndTy(new TR::NxExp(new T::ExpStm(new T::ConstExp(0))), TY::VoidTy::Instance());
     }
 
@@ -879,9 +885,7 @@ namespace A {
 
     TR::Exp *TypeDec::Translate(S::Table<E::EnvEntry> *venv, S::Table<TY::Ty> *tenv,
                                 TR::Level *level, TEMP::Label *label) const {
-        printf("Translate: TypeDec\n");
-        fflush(stdout);
-        fflush(stdout);
+//        p("Translate: TypeDec\n");
         NameAndTyList *nameAndTyList = types;
         while (nameAndTyList) {
             TY::Ty *ty = tenv->Look(nameAndTyList->head->name);
@@ -912,7 +916,6 @@ namespace A {
             }
             nameAndTyList = nameAndTyList->tail;
         }
-        printf("Translate: TypeDec finished\n");
         return nullptr;
     }
 

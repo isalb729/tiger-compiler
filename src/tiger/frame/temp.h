@@ -2,7 +2,6 @@
 #define TIGER_FRAME_TEMP_H_
 
 #include "tiger/symbol/symbol.h"
-
 namespace TEMP {
     using Label = S::Symbol;
 
@@ -23,6 +22,7 @@ namespace TEMP {
 
         Temp(int num) : num(num) {}
     };
+
 
     class Map {
     public:

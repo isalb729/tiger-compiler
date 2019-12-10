@@ -23,7 +23,6 @@ namespace CG {
     void munchMoveStm(T::MoveStm *);
     void munchExpStm(T::ExpStm *);
     TEMP::TempList *munchArgs(int pos, T::ExpList *args, std::string name);
-    std::string fs();
 
 }
 #endif

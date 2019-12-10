@@ -126,7 +126,8 @@ namespace F {
 
     // formals include static link
     X64Frame::X64Frame(TEMP::Label *name, U::BoolList *formalEscapes) : Frame(name) {
-        uint32_t offset = 0;
+        uint32_t offset = 8;
+        // arg2..arg1..staticlink..return address
         if (formalEscapes) {
             AccessList *formals_ = new AccessList(nullptr, nullptr), *tail = formals_;
             for (int i = 0; formalEscapes; formalEscapes = formalEscapes->tail) {
@@ -176,8 +177,19 @@ namespace F {
         return r;
     }
 
+    template<typename t>
+    static uint listLen(t *i) {
+        uint count = 0;
+        while (i) {
+            i = i->tail;
+            count++;
+        }
+        return count;
+    }
     AS::Proc *F_procEntryExit3(Frame *frame, AS::InstrList *instrList) {
-//        frame->size += 8;
+        //lab5
+        // add frame size for temp in main
+        //
         std::string prolog, epilog, fs;
         prolog = frame->label->Name() + ":\n";
         fs = TEMP::LabelString(frame->label) + "_framesize";
@@ -189,7 +201,6 @@ namespace F {
     }
 
     TEMP::Map *init_temp_map(TEMP::Map *map) {
-        // TODO: 16 registers
         map->Enter(F::RSP(), new std::string("%rsp"));
         map->Enter(F::RAX(), new std::string("%rax"));
         map->Enter(F::RDX(), new std::string("%rdx"));
