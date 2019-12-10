@@ -37,7 +37,6 @@ namespace TY {
     bool Ty::IsSameType(Ty *expected) {
         Ty *a = this->ActualTy();
         Ty *b = expected->ActualTy();
-
         if ((a->kind == RECORD && b->kind == NIL) ||
             (a->kind == NIL && b->kind == RECORD)) {
             return true;

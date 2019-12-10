@@ -221,7 +221,6 @@ namespace A {
     TR::ExpAndTy FieldVar::Translate(S::Table<E::EnvEntry> *venv,
                                      S::Table<TY::Ty> *tenv, TR::Level *level,
                                      TEMP::Label *label) const {
-        //p("Translate: fieldvar\n");
         TR::ExpAndTy expAndTy = this->var->Translate(venv, tenv, level, label);
         TY::Ty *ty = expAndTy.ty;
         TR::Exp *exp = expAndTy.exp;
@@ -277,7 +276,6 @@ namespace A {
     TR::ExpAndTy NilExp::Translate(S::Table<E::EnvEntry> *venv,
                                    S::Table<TY::Ty> *tenv, TR::Level *level,
                                    TEMP::Label *label) const {
-        //p("Translate: nilexp\n");
         return TR::ExpAndTy(new TR::ExExp(new T::ConstExp(0)), TY::NilTy::Instance());
     }
 
@@ -344,7 +342,6 @@ namespace A {
     TR::ExpAndTy OpExp::Translate(S::Table<E::EnvEntry> *venv,
                                   S::Table<TY::Ty> *tenv, TR::Level *level,
                                   TEMP::Label *label) const {
-        //p("Translate: opexp\n");
         TR::ExpAndTy expAndTy1 = this->left->Translate(venv, tenv, level, label);
         TR::ExpAndTy expAndTy2 = this->right->Translate(venv, tenv, level, label);
         TY::Ty *ty1 = expAndTy1.ty;
@@ -365,8 +362,11 @@ namespace A {
         T::BinOp binOp;
         T::RelOp relOp;
         T::Stm *stm;
-        if (expAndTy1.exp->UnEx()->kind == T::Exp::NAME && expAndTy2.exp->UnEx()->kind == T::Exp::NAME) {
-            T::Exp *call = F::ExternalCall("stringEqual", new T::ExpList(level->frame->formals->head->toExp(new T::TempExp(F::FP())), new T::ExpList(expAndTy1.exp->UnEx(), new T::ExpList(expAndTy2.exp->UnEx(),
+        if (expAndTy1.exp->UnEx()->kind == T::Exp::NAME || expAndTy2.exp->UnEx()->kind == T::Exp::NAME) {
+            T::Exp *call = F::ExternalCall("stringEqual", new T::ExpList(level->frame->formals->head->toExp(
+                    new T::TempExp(F::FP())),
+                            new T::ExpList(expAndTy1.exp->UnEx(),
+                                    new T::ExpList(expAndTy2.exp->UnEx(),
                                                                                                            nullptr))));
             switch (oper) {
                 case EQ_OP:
@@ -429,12 +429,9 @@ namespace A {
     TR::ExpAndTy RecordExp::Translate(S::Table<E::EnvEntry> *venv,
                                       S::Table<TY::Ty> *tenv, TR::Level *level,
                                       TEMP::Label *label) const {
-        //p("Translate: recordexp\n")
-
         TY::Ty *ty = tenv->Look(this->typ);
         int count = 0;
         TEMP::Temp *r = TEMP::Temp::NewTemp();
-        // TODO: REMOVE ADDTEMP
         T::Stm *stm_ = new T::SeqStm(nullptr, nullptr);
         T::StmList *stmList = new T::StmList(nullptr, nullptr), *tail = stmList;
         if (!ty) {
@@ -467,9 +464,9 @@ namespace A {
             }
         }
         T::Stm *stm = new T::MoveStm(new T::TempExp(r),
-                                     new T::CallExp(new T::NameExp(TEMP::NamedLabel("allocRecord")),
-                                                    new T::ExpList(new T::ConstExp(8 * count),
-                                                                   nullptr)));
+                                     F::ExternalCall("allocRecord",
+                                                    new T::ExpList(new T::TempExp(F::FP()), new T::ExpList(new T::ConstExp(8 * count),
+                                                                   nullptr))));
         if (stm_) {
             stm_ = new T::SeqStm(stm, stm_);
         } else {
@@ -885,7 +882,6 @@ namespace A {
 
     TR::Exp *TypeDec::Translate(S::Table<E::EnvEntry> *venv, S::Table<TY::Ty> *tenv,
                                 TR::Level *level, TEMP::Label *label) const {
-//        p("Translate: TypeDec\n");
         NameAndTyList *nameAndTyList = types;
         while (nameAndTyList) {
             TY::Ty *ty = tenv->Look(nameAndTyList->head->name);
@@ -898,13 +894,18 @@ namespace A {
         }
         nameAndTyList = types;
         while (nameAndTyList) {
-            TY::Ty *ty = tenv->Look(nameAndTyList->head->name);
-            tenv->Set(nameAndTyList->head->name, nameAndTyList->head->ty->SemAnalyze(tenv));
+            tenv->Set(nameAndTyList->head->name, nameAndTyList->head->ty->Translate(tenv));
             nameAndTyList = nameAndTyList->tail;
         }
         nameAndTyList = types;
         while (nameAndTyList) {
             TY::Ty *ty = tenv->Look(nameAndTyList->head->name);
+            if (ty->kind == TY::Ty::RECORD) {
+                auto record = ((RecordTy *)(nameAndTyList->head->ty))->record;
+                for (auto field = ((TY::RecordTy *)ty)->fields; field; field = field->tail, record = record->tail) {
+                    field->head->ty = tenv->Look(record->head->typ);
+                }
+            }
             TY::Ty *ty1 = ty;
             while (ty1->kind == TY::Ty::NAME) {
                 ty1 = tenv->Look(((TY::NameTy *) ty1)->sym);
@@ -916,12 +917,13 @@ namespace A {
             }
             nameAndTyList = nameAndTyList->tail;
         }
+
+
+
         return nullptr;
     }
 
     TY::Ty *NameTy::Translate(S::Table<TY::Ty> *tenv) const {
-        printf("Translate: namty\n");
-        fflush(stdout);
         TY::Ty *ty = tenv->Look(this->name);
         if (!ty) {
             errormsg.Error(pos, "undefined type %s", name->Name().c_str());
@@ -931,8 +933,6 @@ namespace A {
     }
 
     TY::Ty *RecordTy::Translate(S::Table<TY::Ty> *tenv) const {
-        printf("Translate: recordty\n");
-        fflush(stdout);
         FieldList *fieldList = this->record;
         TY::FieldList *fieldList1 = make_fieldlist(tenv, fieldList);
         TY::FieldList *ret = fieldList1;
@@ -944,6 +944,8 @@ namespace A {
             if (!ty) {
                 errormsg.Error(pos, "undefined type %s", fieldList->head->typ->Name().c_str());
                 fieldList1->head->ty = TY::IntTy::Instance();
+            } else {
+                fieldList1->head->ty = ty;
             }
             fieldList = fieldList->tail;
             fieldList1 = fieldList1->tail;
@@ -952,8 +954,6 @@ namespace A {
     }
 
     TY::Ty *ArrayTy::Translate(S::Table<TY::Ty> *tenv) const {
-        printf("Translate: arrayty\n");
-        fflush(stdout);
         TY::Ty *ty = tenv->Look(array);
         if (!ty) {
             errormsg.Error(pos, "undefined type %s", array->Name().c_str());
