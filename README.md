@@ -1,5 +1,5 @@
 # Tiger Compiler Labs in C++
-
+## Many bugs in this lab found in lab6
 ## Contents
 
 - [Tiger Compiler Labs in C++](#tiger-compiler-labs-in-c)
