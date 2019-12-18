@@ -4,7 +4,6 @@
 #include <set>
 #include <string>
 #include "tiger/errormsg/errormsg.h"
-#include "tiger/semant/semant.h"
 
 #define p(s, ...) do { \
   printf(s, ##__VA_ARGS__); \
@@ -140,6 +139,7 @@ namespace TR {
 
 
     F::FragList *TranslateProgram(A::Exp *root) {
+        ESC::FindEscape(root);
         if (root) {
             Level *level = Level::NewLevel(Outermost(), TEMP::NamedLabel("tigermain"), nullptr);
             TR::ExpAndTy expAndTy = root->Translate(E::BaseVEnv(), E::BaseTEnv(), level, TEMP::NewLabel());
@@ -150,18 +150,56 @@ namespace TR {
         return fragList->tail;
     }
 
+    // addfrag
     T::Stm *procEntryExit1(F::Frame *frame, TR::Exp *body) {
+//        move nth args to newtemp or local
+        T::StmList *argStm = nullptr, *tail_;
+        F::AccessList *formals = frame->formals->tail;
+        int i = 0;
+        // TODO: IMPORTANT FOR ESCAPE
+        while (formals) {
+            if (formals->head->kind == F::Access::INREG) {
+                if (!argStm) {
+                    argStm = new T::StmList(new T::MoveStm(new T::TempExp(((F::InRegAccess *) formals->head)->reg),
+                                                           new T::TempExp(F::nthargs(i))), nullptr);
+                    tail_ = argStm;
+                } else {
+                    tail_ = tail_->tail = new T::StmList(
+                            new T::MoveStm(new T::TempExp(((F::InRegAccess *) formals->head)->reg),
+                                           new T::TempExp(F::nthargs(i))), nullptr);
+                }
+            } else {
+                if (!argStm) {
+                    argStm = new T::StmList(
+                            new T::MoveStm(((F::InFrameAccess *) formals->head)->toExp(new T::TempExp(F::FP())),
+                                           new T::TempExp(F::nthargs(i))), nullptr);
+                    tail_ = argStm;
+                } else {
+                    tail_ = tail_->tail = new T::StmList(
+                            new T::MoveStm(new T::TempExp(((F::InRegAccess *) formals->head)->reg),
+                                           new T::TempExp(F::nthargs(i))), nullptr);
+                }
+            }
+            i++;
+            formals = formals->tail;
+        }
+        T::Stm *seqStm = stmList2SeqStm(argStm);
         if (body->kind == TR::Exp::NX) {
             T::Stm *stm = body->UnNx();
+            if (seqStm) {
+                stm = new T::SeqStm(seqStm, stm);
+            }
             F::Frag *frag = new F::ProcFrag(stm, frame);
             addFrag(frag);
             return stm;
         } else {
-            T::Stm *stm = body->UnNx();
-            F::Frag *frag = new F::ProcFrag(
-                    new T::MoveStm(new T::TempExp(F::RV()), body->UnEx()), frame);
+            T::Stm *stm = new T::MoveStm(new T::TempExp(F::RV()), body->UnEx());
+            if (seqStm) {
+                stm = new T::SeqStm(seqStm, stm);
+            }
+            F::Frag *frag = new F::ProcFrag(stm, frame);
             addFrag(frag);
-            return stm;
+            return body->UnNx();
         }
     }
 
@@ -261,7 +299,9 @@ namespace A {
                 return TR::ExpAndTy(nullptr, TY::IntTy::Instance());
             }
             TR::ExExp *exExp = new TR::ExExp(
-                    new T::MemExp(new T::BinopExp(T::PLUS_OP, expAndTy.exp->UnEx(), new T::BinopExp(T::MUL_OP, expAndTy1.exp->UnEx(), new T::ConstExp(8)))));
+                    new T::MemExp(new T::BinopExp(T::PLUS_OP, expAndTy.exp->UnEx(),
+                                                  new T::BinopExp(T::MUL_OP, expAndTy1.exp->UnEx(),
+                                                                  new T::ConstExp(8)))));
             return TR::ExpAndTy(exExp, ((TY::ArrayTy *) ty)->ty->ActualTy());
         }
     }
@@ -365,9 +405,10 @@ namespace A {
         if (expAndTy1.exp->UnEx()->kind == T::Exp::NAME || expAndTy2.exp->UnEx()->kind == T::Exp::NAME) {
             T::Exp *call = F::ExternalCall("stringEqual", new T::ExpList(level->frame->formals->head->toExp(
                     new T::TempExp(F::FP())),
-                            new T::ExpList(expAndTy1.exp->UnEx(),
-                                    new T::ExpList(expAndTy2.exp->UnEx(),
-                                                                                                           nullptr))));
+                                                                         new T::ExpList(expAndTy1.exp->UnEx(),
+                                                                                        new T::ExpList(
+                                                                                                expAndTy2.exp->UnEx(),
+                                                                                                nullptr))));
             switch (oper) {
                 case EQ_OP:
                     stm = new T::CjumpStm(T::EQ_OP, call, new T::ConstExp(1), nullptr, nullptr);
@@ -465,8 +506,9 @@ namespace A {
         }
         T::Stm *stm = new T::MoveStm(new T::TempExp(r),
                                      F::ExternalCall("allocRecord",
-                                                    new T::ExpList(new T::TempExp(F::FP()), new T::ExpList(new T::ConstExp(8 * count),
-                                                                   nullptr))));
+                                                     new T::ExpList(new T::TempExp(F::FP()),
+                                                                    new T::ExpList(new T::ConstExp(8 * count),
+                                                                                   nullptr))));
         if (stm_) {
             stm_ = new T::SeqStm(stm, stm_);
         } else {
@@ -776,8 +818,10 @@ namespace A {
             }
         }
         return TR::ExpAndTy(new TR::ExExp(
-                F::ExternalCall("initArray", new T::ExpList(new T::TempExp(F::FP()), new T::ExpList(expAndTy.exp->UnEx(), new T::ExpList(expAndTy1.exp->UnEx(),
-                                                                                                 nullptr))))), ty);
+                F::ExternalCall("initArray", new T::ExpList(new T::TempExp(F::FP()),
+                                                            new T::ExpList(expAndTy.exp->UnEx(),
+                                                                           new T::ExpList(expAndTy1.exp->UnEx(),
+                                                                                          nullptr))))), ty);
     }
 
     TR::ExpAndTy VoidExp::Translate(S::Table<E::EnvEntry> *venv,
@@ -799,15 +843,15 @@ namespace A {
             }
             TY::TyList *tyList = make_formal_tylist(tenv, funDecList->head->params);
             TEMP::Label *name = TEMP::NewLabel();
-            // TODO: FOR RUNTIME FUNCTIONS FIX IT IN LAB6
-            if (TR::runtime(funDecList->head->name->Name())) {
-                FieldList *params_ = funDecList->head->params;
-                while (params_) {
-                    params_->head->escape = false;
-                    params_ = params_->tail;
-                }
-            }
+            // TODO: FURTHER ANALYZE THE ESCAPE
+//            FieldList *fieldList = funDecList->head->params;
+//            while (fieldList) {
+//                fieldList->head->escape = false;
+//                fieldList = fieldList->tail;
+//            }
+
             U::BoolList *boolList = make_boollist(funDecList->head->params);
+
             TR::Level *newLevel = TR::Level::NewLevel(level, name, boolList);
             if (funDecList->head->result) {
                 TY::Ty *ty = tenv->Look(funDecList->head->result);
@@ -901,8 +945,8 @@ namespace A {
         while (nameAndTyList) {
             TY::Ty *ty = tenv->Look(nameAndTyList->head->name);
             if (ty->kind == TY::Ty::RECORD) {
-                auto record = ((RecordTy *)(nameAndTyList->head->ty))->record;
-                for (auto field = ((TY::RecordTy *)ty)->fields; field; field = field->tail, record = record->tail) {
+                auto record = ((RecordTy *) (nameAndTyList->head->ty))->record;
+                for (auto field = ((TY::RecordTy *) ty)->fields; field; field = field->tail, record = record->tail) {
                     field->head->ty = tenv->Look(record->head->typ);
                 }
             }
@@ -917,7 +961,6 @@ namespace A {
             }
             nameAndTyList = nameAndTyList->tail;
         }
-
 
 
         return nullptr;

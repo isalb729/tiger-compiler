@@ -1,11 +1,12 @@
 #ifndef TIGER_TRANSLATE_TRANSLATE_H_
 #define TIGER_TRANSLATE_TRANSLATE_H_
 
-#include "tiger/absyn/absyn.h"
+//#include "tiger/absyn/absyn.h"
 #include "tiger/frame/frame.h"
 #include "tiger/translate/printtree.h"
 #include "tiger/util/util.h"
 #include "tiger/translate/tree.h"
+#include "tiger/escape/escape.h"
 /* Forward Declarations */
 namespace A {
     class Exp;

@@ -31,7 +31,7 @@ class Graph {
 
   /* Show all the nodes and edges in the graph, using the function "showInfo"
     to print the name of each node */
-  static void Show(FILE* out, NodeList<T>* p, void showInfo(T*));
+//  static void Show(FILE* out, NodeList<T>* p, void showInfo(T*));
 
   int nodecount;
   NodeList<T>* mynodes;
@@ -228,19 +228,19 @@ using Table = TAB::Table<Node<T>, ValueType>;
 /*
  * Print a human-readable dump for debugging.
  */
-template <class T>
-void Graph<T>::Show(FILE* out, NodeList<T>* p, void showInfo(T*)) {
-  for (; p != nullptr; p = p->tail) {
-    Node<T>* n = p->head;
-    NodeList<T>* q;
-    assert(n);
-    if (showInfo) showInfo(n->NodeInfo());
-    fprintf(out, " (%d): ", n->Key());
-    for (q = n->Succ(); q != nullptr; q = q->tail)
-      fprintf(out, "%d ", q->head->Key());
-    fprintf(out, "\n");
-  }
-}
+//template <class T>
+//void Graph<T>::Show(FILE* out, NodeList<T>* p, void showInfo(T*)) {
+//  for (; p != nullptr; p = p->tail) {
+//    Node<T>* n = p->head;
+//    NodeList<T>* q;
+//    assert(n);
+//    if (showInfo) showInfo(n->NodeInfo());
+//    fprintf(out, " (%d): ", n->Key());
+//    for (q = n->Succ(); q != nullptr; q = q->tail)
+//      fprintf(out, "%d ", q->head->Key());
+//    fprintf(out, "\n");
+//  }
+//}
 
 }  // namespace G
 

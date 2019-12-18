@@ -2,6 +2,7 @@
 
 #include <cstdio>
 #include <sstream>
+#include <set>
 
 namespace {
 
@@ -16,6 +17,129 @@ namespace {
 }  // namespace
 
 namespace TEMP {
+    TEMP::TempList *rmdu(TEMP::TempList *tempList) {
+        std::set<TEMP::Temp *> *set = new std::set<TEMP::Temp *>{};
+        while (tempList && tempList->head) {
+            set->insert(tempList->head);
+            tempList = tempList->tail;
+        }
+        TEMP::TempList *r = nullptr, *tail = nullptr;
+        for (auto it : *set) {
+            if (!r) {
+                r = new TEMP::TempList(it, nullptr);
+                tail = r;
+            } else {
+                tail = tail->tail = new TEMP::TempList(it, nullptr);
+            }
+        }
+        if (!r || !r->head) {
+            return nullptr;
+        } else {
+            return r;
+        }
+    }
+
+    TEMP::TempList *unionList(TEMP::TempList *tl1, TEMP::TempList *tl2) {
+        if (!tl1 || !tl1->head) {
+            if (!tl2 || !tl2->head) {
+                return nullptr;
+            } else {
+                return rmdu(tl2);
+            }
+        } else {
+            if (!tl2 || !tl2->head) {
+                return rmdu(tl1);
+            } else {
+                std::set<TEMP::Temp *> *set = new std::set<TEMP::Temp *>{};
+                while (tl1) {
+                    set->insert(tl1->head);
+                    tl1 = tl1->tail;
+                }
+                while (tl2) {
+                    set->insert(tl2->head);
+                    tl2 = tl2->tail;
+                }
+                TEMP::TempList *r = nullptr, *tail;
+                for (auto it : *set) {
+                    if (!r) {
+                        r = new TEMP::TempList(it, nullptr);
+                        tail = r;
+                    } else {
+                        tail = tail->tail = new TEMP::TempList(it, nullptr);
+                    }
+                }
+                return r;
+            }
+        }
+    }
+
+    TEMP::TempList *intersectList(TEMP::TempList *tl1, TEMP::TempList *tl2) {
+        if (!tl1 || !tl1->head || !tl2 || !tl2->head) {
+            return nullptr;
+        }
+        TEMP::TempList *r = nullptr, *tail = nullptr;
+        while (tl1) {
+            TEMP::TempList *tl2_ = tl2;
+            while (tl2_) {
+                if (tl1->head == tl2_->head) {
+                    break;
+                }
+                tl2_ = tl2_->tail;
+            }
+            if (tl2_) {
+                if (!r) {
+                    r = new TEMP::TempList(tl1->head, nullptr);
+                    tail = r;
+                } else {
+                    tail = tail->tail = new TEMP::TempList(tl1->head, nullptr);
+                }
+            }
+            tl1 = tl1->tail;
+        }
+        return rmdu(r);
+    }
+
+    TEMP::TempList *minusList(TEMP::TempList *tl1, TEMP::TempList *tl2) {
+        std::set<TEMP::Temp *> *set1 = new std::set<TEMP::Temp *>{};
+        std::set<TEMP::Temp *> *set2 = new std::set<TEMP::Temp *>{};
+        while (tl1 && tl1->head) {
+            set1->insert(tl1->head);
+            tl1 = tl1->tail;
+        }
+        while (tl2 && tl2->head) {
+            set2->insert(tl2->head);
+            tl2 = tl2->tail;
+        }
+        TEMP::TempList *r = nullptr, *tail = nullptr;
+        for (auto it : *set1) {
+            if (set2->find(it) != set2->end()) {
+                continue;
+            }
+            if (!r) {
+                r = new TEMP::TempList(it, nullptr);
+                tail = r;
+            } else {
+                tail = tail->tail = new TEMP::TempList(it, nullptr);
+            }
+        }
+        if (!r || !r->head) {
+            return nullptr;
+        } else {
+            return r;
+        }
+    }
+
+    bool equalList(TEMP::TempList *tl1, TEMP::TempList *tl2) {
+        // TODO: RMDU?
+        return  listLen(tl1) == listLen(tl2) && listLen(intersectList(tl1, tl2)) == listLen(tl2);
+    }
+    void TempList::Print() {
+        TempList *p = this;
+        while (p) {
+            printf("%d  ", p->head->Int());
+            p = p->tail;
+        }
+    }
     TEMP::TempList *tempList(TEMP::Temp *temp) {
         static TEMP::TempList *tempList, *tempList_tail;
         if (!temp) {
@@ -93,7 +217,6 @@ namespace TEMP {
             this->under->DumpMap(out);
         }
     }
-
 
 
 }  // namespace TEMP

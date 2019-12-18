@@ -3,6 +3,7 @@
 
 namespace F {
 
+
     TEMP::Temp *nthargs(uint n) {
         switch (n) {
             case 0:
@@ -18,10 +19,17 @@ namespace F {
             case 5:
                 return R9();
             default:
-                printf("nthargs: wrong para n %u\n", n);
-                fflush(stdout);
                 assert(0);
         }
+    }
+
+    TEMP::TempList *argRegs() {
+        return new TEMP::TempList(RDI(), new TEMP::TempList(RSI(), new TEMP::TempList(RDX(), new TEMP::TempList(RCX(),
+                                                                                                                new TEMP::TempList(
+                                                                                                                        R8(),
+                                                                                                                        new TEMP::TempList(
+                                                                                                                                R9(),
+                                                                                                                                nullptr))))));
     }
 
     TEMP::Temp *RSP() {
@@ -47,9 +55,6 @@ namespace F {
         return RAX();
     }
 
-    TEMP::Temp *SP() {
-        return RSP();
-    }
 
     TEMP::Temp *RDI() {
         static TEMP::Temp *rdi = TEMP::Temp::NewTemp();
@@ -116,6 +121,63 @@ namespace F {
         return r15;
     }
 
+    // %rbx, %rbp, %r12, %r13, %r14, %r15
+    TEMP::TempList *calleeSaved() {
+        return new TEMP::TempList(RBX(), new TEMP::TempList(RBP(),
+                                                            new TEMP::TempList(R12(), new TEMP::TempList(R13(),
+                                                                                                         new TEMP::TempList(
+                                                                                                                 R14(),
+                                                                                                                 new TEMP::TempList(
+                                                                                                                         R15(),
+                                                                                                                         nullptr))))));
+    }
+
+    // %r10, %r11
+    // TODO: CALLER SAVED INTERFERENCE LIVE
+    TEMP::TempList *callerSaved() {
+        return new TEMP::TempList(R10(), new TEMP::TempList(R11(), nullptr));
+    }
+
+    TEMP::TempList *regs() {
+        return new TEMP::TempList(RBX(), new TEMP::TempList(RBP(),
+                                                            new TEMP::TempList(RSP(), new TEMP::TempList(R13(),
+                                                                                                         new TEMP::TempList(
+                                                                                                                 R14(),
+                                                                                                                 new TEMP::TempList(
+                                                                                                                         R15(),
+                                                                                                                         new TEMP::TempList(
+                                                                                                                                 R8(),
+                                                                                                                                 new TEMP::TempList(
+                                                                                                                                         R9(),
+                                                                                                                                         new TEMP::TempList(
+                                                                                                                                                 R10(),
+                                                                                                                                                 new TEMP::TempList(
+                                                                                                                                                         R11(),
+                                                                                                                                                         new TEMP::TempList(
+                                                                                                                                                                 R12(),
+                                                                                                                                                                 new TEMP::TempList(
+                                                                                                                                                                         RDI(),
+                                                                                                                                                                         new TEMP::TempList(
+                                                                                                                                                                                 RDX(),
+                                                                                                                                                                                 new TEMP::TempList(
+                                                                                                                                                                                         RSI(),
+                                                                                                                                                                                         new TEMP::TempList(
+                                                                                                                                                                                                 RCX(),
+                                                                                                                                                                                                 new TEMP::TempList(
+                                                                                                                                                                                                         RAX(),
+                                                                                                                                                                                                         nullptr))))))))))))))));
+    }
+
+    std::set<TEMP::Temp *> *regSet() {
+        std::set<TEMP::Temp *> *set = new std::set<TEMP::Temp *>{};
+        TEMP::TempList *regList = regs();
+        while (regList) {
+            set->insert(regList->head);
+            regList = regList->tail;
+        }
+        return set;
+    }
+
     T::Exp *InFrameAccess::toExp(T::Exp *framePtr) const {
         return new T::MemExp(new T::BinopExp(T::PLUS_OP, framePtr, new T::ConstExp(offset)));
     }
@@ -130,21 +192,29 @@ namespace F {
         // arg2..arg1..staticlink..return address
         if (formalEscapes) {
             AccessList *formals_ = new AccessList(nullptr, nullptr), *tail = formals_;
+            Access *access = new InFrameAccess(offset);
+            offset += 8;
+            tail = tail->tail = new AccessList(access, nullptr);
+            formalEscapes = formalEscapes->tail;
             for (int i = 0; formalEscapes; formalEscapes = formalEscapes->tail) {
-                Access *access;
-                if (formalEscapes->head) {
-                    access = new InFrameAccess(offset);
-                    offset += 8;
-                } else {
-                    access = new InRegAccess(nthargs(i));
+                // TODO: FUNDEC, MUNCHARGS
+//                assert(!formalEscapes->head);
+                // move nth args to new temp
+                if (!formalEscapes->head) {
+                    assert(i < 6);
+                    access = new InRegAccess(TEMP::Temp::NewTemp());
+//                    access = new InRegAccess(nthargs(i));
                     i++;
+                } else {
+                    access = allocal(true);
+//                    access = new InFrameAccess(offset);
+//                    offset += 8;
                 }
                 tail = tail->tail = new AccessList(access, nullptr);
             }
             this->formals = formals_->tail;
         }
     }
-
 
     Access *X64Frame::allocal(bool escape) {
         if (escape) {
@@ -156,24 +226,26 @@ namespace F {
             }
             locals_ = new AccessList(access, nullptr);
             return access;
+        } else {
+            return new InRegAccess(TEMP::Temp::NewTemp());
         }
-        return new InRegAccess(TEMP::Temp::NewTemp());
     }
 
     T::Exp *ExternalCall(std::string s, T::ExpList *args) {
-        // TODO: ADD "_"
         return new T::CallExp(new T::NameExp(TEMP::NamedLabel(s)), args);
     }
 
-
     AS::InstrList *F_procEntryExit2(AS::InstrList *body) {
         static TEMP::TempList *returnSink = new TEMP::TempList(F::RSP(), new TEMP::TempList(F::RAX(), nullptr));
+        static TEMP::TempList *beginSrc = new TEMP::TempList(F::RSP(), nullptr);
         AS::Instr *instr = new AS::OperInstr("", nullptr, returnSink, nullptr);
         AS::InstrList *r = body;
-        while (body) {
+        while (body->tail) {
             body = body->tail;
         }
-        body = new AS::InstrList(instr, nullptr);
+        body->tail = new AS::InstrList(instr, nullptr);
+        instr = new AS::OperInstr("", beginSrc, beginSrc, nullptr);
+        r = new AS::InstrList(instr, r);
         return r;
     }
 
@@ -186,16 +258,13 @@ namespace F {
         }
         return count;
     }
+
     AS::Proc *F_procEntryExit3(Frame *frame, AS::InstrList *instrList) {
-        //lab5
-        // add frame size for temp in main
-        //
         std::string prolog, epilog, fs;
         prolog = frame->label->Name() + ":\n";
         fs = TEMP::LabelString(frame->label) + "_framesize";
-        prolog =
-                prolog + ".set " + fs + ", " + std::to_string(frame->size) + "\nsubq $" + std::to_string(frame->size) +
-                ", %rsp\n";
+        prolog = prolog + ".set " + fs + ", " + std::to_string(frame->size)
+                 + "\nsubq $" + std::to_string(frame->size) + ", %rsp\n";
         epilog = "addq $" + std::to_string(frame->size) + ", %rsp\nretq\n\n";
         return new AS::Proc(prolog, instrList, epilog);
     }

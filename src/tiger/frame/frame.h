@@ -6,7 +6,7 @@
 #include "tiger/codegen/assem.h"
 #include "tiger/translate/tree.h"
 #include "tiger/util/util.h"
-
+#include <set>
 namespace AS {
     class Proc;
 
@@ -18,14 +18,9 @@ namespace TR {
 namespace F {
     TEMP::Temp *RSP();
     TEMP::Temp *RAX();
-
     TEMP::Temp *RDX();
-
     TEMP::Temp *FP();
-
     TEMP::Temp *RV();
-
-    TEMP::Temp *SP();
     TEMP::Temp *RDI();
     TEMP::Temp *RBP();
     TEMP::Temp *RBX();
@@ -40,6 +35,9 @@ namespace F {
     TEMP::Temp *R14();
     TEMP::Temp *R15();
     TEMP::Temp *nthargs(uint n);
+    TEMP::TempList *calleeSaved();
+    TEMP::TempList *callerSaved();
+    TEMP::TempList *argRegs();
     class Access;
 
     class AccessList;
@@ -154,6 +152,10 @@ namespace F {
 
     TEMP::Map *init_temp_map(TEMP::Map *);
     TEMP::Map *regmap();
+    TEMP::TempList *regs();
+    TEMP::TempList *callerSaved();
+    TEMP::TempList *calleeSaved();
+    std::set<TEMP::Temp *> *regSet();
 }  // namespace F
 
 #endif

@@ -54,6 +54,7 @@ namespace TEMP {
         TempList *tail;
 
         TempList(Temp *h, TempList *t) : head(h), tail(t) {}
+        void Print();
     };
 
     class LabelList {
@@ -65,6 +66,20 @@ namespace TEMP {
     };
 
     TEMP::TempList *tempList(TEMP::Temp *);
+    TEMP::TempList *rmdu(TEMP::TempList *);
+    TEMP::TempList *unionList(TEMP::TempList *, TEMP::TempList *);
+    TEMP::TempList *intersectList(TEMP::TempList *, TEMP::TempList *);
+    TEMP::TempList *minusList(TEMP::TempList *, TEMP::TempList *);
+    bool equalList(TEMP::TempList *, TEMP::TempList *);
+    template<typename t>
+    static uint listLen(t *i) {
+        uint count = 0;
+        while (i) {
+            i = i->tail;
+            count++;
+        }
+        return count;
+    }
 }  // namespace TEMP
 
 #endif

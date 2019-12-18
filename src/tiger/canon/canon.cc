@@ -12,7 +12,6 @@ namespace {
     T::StmList *get_next();
 
     bool is_nop(T::Stm *x) {
-        //[TODO] remove judgement using "kind" property
         if (x->kind == T::Stm::Kind::EXP) {
             return dynamic_cast<T::ExpStm *>(x)->exp->kind == T::Exp::Kind::CONST;
         } else

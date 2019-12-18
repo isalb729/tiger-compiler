@@ -22,7 +22,11 @@ namespace CG {
     void munchCJumpStm(T::CjumpStm *);
     void munchMoveStm(T::MoveStm *);
     void munchExpStm(T::ExpStm *);
-    TEMP::TempList *munchArgs(int pos, T::ExpList *args, std::string name);
-
+    TEMP::TempList *munchArgs(int pos, T::ExpList *args);
+    static TEMP::TempList *callee, *caller;
+    void saveCalleeSaved();
+    void saveCallerSaved();
+    void restoreCalleeSaved();
+    void restoreCallerSaved();
 }
 #endif

@@ -33,9 +33,10 @@ class Table {
 
 template <typename KeyType, typename ValueType>
 void Table<KeyType, ValueType>::Enter(KeyType *key, ValueType *value) {
-  int index = ((unsigned long)key) % TABSIZE;
-  table_[index] = new Binder(key, value, table_[index], top_);
-  top_ = key;
+    int index = ((unsigned long)key) % TABSIZE;
+    assert(table_);
+    table_[index] = new Binder(key, value, table_[index], top_);
+    top_ = key;
 }
 
 template <typename KeyType, typename ValueType>
